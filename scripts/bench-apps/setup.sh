@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepares the real-world app benchmark in the README (Linux x64 or macOS arm64): the compilers, Bun canary and
+# Prepares the real-world app benchmark (Linux x64): the compilers from npm and
 # the apps at their measured commits, with dependencies installed without install scripts.
 # usage: scripts/bench-apps/setup.sh <work-dir>
 # Use a work dir whose name ends in .noindex, so Spotlight does not index the repos.
@@ -9,22 +9,10 @@ set -euo pipefail
 mkdir -p "$1" && cd "$1"
 mkdir -p repos logs
 
-# Compilers. TypeScript 6 and 7 both name their bin tsc, so run.sh calls each one by path.
+# Compilers, all official npm releases. ts6 stays only for t3code.sh, which reads the configs with its parser.
 [[ -f package.json ]] || echo '{ "private": true }' >package.json
-npm i -q --no-audit --no-fund tsc-rs@0.6.0 typescript@7.1.0-dev.20261008.1 ts6@npm:typescript@6.0.3
-# Save the archive hash and revision: the canary download URL moves.
-case "$(uname -s)/$(uname -m)" in
-  Linux/x86_64) bun_platform=linux-x64 ;;
-  Darwin/arm64) bun_platform=darwin-aarch64 ;;
-  *) echo "unsupported benchmark platform" >&2; exit 1 ;;
-esac
-curl -fsSL -o bun.zip "https://github.com/oven-sh/bun/releases/download/canary/bun-$bun_platform.zip"
-if [[ -n ${BUN_SHA256:-} ]]; then
-  echo "$BUN_SHA256  bun.zip" | shasum -a 256 -c -
-fi
-shasum -a 256 bun.zip > logs/bun-archive.sha256
-unzip -oq bun.zip && rm bun.zip
-echo "bun $("bun-$bun_platform/bun" --revision)"
+npm i -q --no-audit --no-fund typescript@7.0.2 tsc-rs@0.7.0 tsc-ts@0.0.2 tsrs@0.16.0-ts7.1.0-dev.20260929 \
+  bun@1.4.3 ts6@npm:typescript@6.0.3
 
 checkout() { # name url sha
   [[ -d repos/$1 ]] && return

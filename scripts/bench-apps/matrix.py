@@ -15,8 +15,7 @@ if suite in ['all', 'apps']:
 if suite in ['all', 't3']:
     prepare.append('t3code')
     for project in ['apps/server', 'apps/web', 'apps/mobile', 'packages/client-runtime', 'packages/shared']:
-        for mode in ['noeffect', 'effect']:
-            bench.append({'project': 't3code', 'case': f't3-{project.replace("/", "-")}-{mode}',
-                          'path': project, 'mode': mode})
+        bench.append({'project': 't3code', 'case': f't3-{project.replace("/", "-")}-noeffect',
+                      'path': project, 'mode': 'noeffect'})
 print('prepare=' + json.dumps({'project': prepare}))
 print('bench=' + json.dumps({'include': bench}))

@@ -26,32 +26,28 @@ def digest(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
-compiler_platform, bun_platform = {
-    ('Linux', 'x86_64'): ('linux-x64', 'linux-x64'),
-    ('Darwin', 'arm64'): ('darwin-arm64', 'darwin-aarch64'),
-}[(platform.system(), platform.machine())]
+nm = work / 'node_modules'
 tools = {
-    'tsc-rs': Path(os.environ.get('RS_BIN', work / f'node_modules/@tsc-rs/{compiler_platform}/lib/tsc')),
-    'tsc-rs-fast': Path(os.environ.get('RS_BIN', work / f'node_modules/@tsc-rs/{compiler_platform}/lib/tsc')),
-    'tsc7': work / f'node_modules/@typescript/typescript-{compiler_platform}/lib/tsc',
-    'bun': work / f'bun-{bun_platform}/bun',
+    'tsc7': nm / '@typescript/typescript-linux-x64/lib/tsc',
+    'tsc-rs': nm / '@tsc-rs/linux-x64/lib/tsc',
+    'tsc-ts': nm / '@tsc-ts/linux-x64-gnu/lib/tsc-ts',
+    'tsrs': nm / '@tsrs/linux-x64-gnu/tsrs',
+    'bun': nm / '@oven/bun-linux-x64/bin/bun',
 }
 metadata = {
     'date': datetime.now(timezone.utc).isoformat(),
     'source': command('git', 'rev-parse', 'HEAD'),
-    'compilerTree': command('git', 'rev-parse', 'HEAD:crates/ts_goport'),
     'run': f"https://github.com/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}",
-    'build': 'release PGO, static musl, no BOLT' if compiler_platform == 'linux-x64' else 'release PGO, no BOLT',
+    'build': 'official npm packages',
     'host': platform.platform(),
-    'cpu': command('lscpu') if compiler_platform == 'linux-x64' else command('sysctl', 'machdep.cpu.brand_string', 'hw.ncpu', 'hw.memsize'),
+    'cpu': command('lscpu'),
     'memory': Path('/proc/meminfo').read_text() if Path('/proc/meminfo').exists() else None,
     'node': command('node', '--version'),
     'pnpm': command('pnpm', '--version'),
     'hyperfine': command('hyperfine', '--version'),
-    'rust': command('rustc', '-vV'),
     'rounds': int(os.environ.get('RUNS', '5')),
     'warmups': 1,
-    'tools': {name: {'version': command(str(path), '--revision' if name == 'bun' else '--version'),
+    'tools': {name: {'version': command(str(path), '--version'),
                      'sha256': digest(path)} for name, path in tools.items() if path.exists()},
     'inputs': {},
     'packages': {},
@@ -62,17 +58,14 @@ for repo in sorted((work / 'repos').glob('*')):
     locks = {str(path.relative_to(repo)): digest(path) for path in
              [repo / 'pnpm-lock.yaml', repo / 'yarn.lock', repo / 'package-lock.json'] if path.exists()}
     metadata['inputs'][repo.name] = {'commit': command('git', 'rev-parse', 'HEAD', cwd=repo), 'locks': locks}
-for name in ['typescript', 'ts6', 'tsc-rs', '../effectgo/node_modules/@effect/tsgo', '../ts6effect/node_modules/@effect/language-service']:
-    path = (work / name[3:] if name.startswith('../') else work / 'node_modules' / name) / 'package.json'
+for name in ['typescript', 'ts6', 'tsc-rs', 'tsc-ts', 'tsrs', 'bun']:
+    path = nm / name / 'package.json'
     if path.exists():
         package = json.loads(path.read_text())
         metadata['packages'][package['name'] + (' (ts6)' if name == 'ts6' else '')] = package['version']
-for name in ['package-lock.json', 'effectgo/package-lock.json', 'ts6effect/package-lock.json']:
+for name in ['package-lock.json']:
     path = work / name
     metadata[name] = digest(path)
-build = Path(os.environ.get('RS_BIN', '/nonexistent')).parent / 'build.json'
-if build.exists():
-    metadata['compilerBuild'] = json.loads(build.read_text())
 case = os.environ.get('BENCH_CASE')
 (results / (f'metadata-{case}.json' if case else 'metadata.json')).write_text(json.dumps(metadata, indent=2) + '\n')
 print(json.dumps(metadata, indent=2))

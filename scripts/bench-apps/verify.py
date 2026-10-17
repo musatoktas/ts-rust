@@ -1,57 +1,61 @@
 #!/usr/bin/env python3
-"""Verify the fresh benchmark's Rust/Go diagnostics before publishing its tables."""
+"""Compare each tool's diagnostics with tsc 7's for every case. It reports and does not fail:
+the tools pin different TypeScript versions. Writes results/diagnostics.md.
+usage: scripts/bench-apps/verify.py <work-dir> [--case CASE]"""
 import argparse
 import re
 from pathlib import Path
 
-apps = ['vscode', 'sentry', 'playwright', 'typeorm', 'excalidraw', 'trpc-server']
-projects = ['apps-server', 'apps-web', 'apps-mobile', 'packages-client-runtime', 'packages-shared']
+CASES = ['vscode', 'sentry', 'playwright', 'typeorm', 'excalidraw', 'trpc-server'] + [
+    f't3-{p}-noeffect' for p in ['apps-server', 'apps-web', 'apps-mobile', 'packages-client-runtime', 'packages-shared']]
+TOOLS = ['tsc-rs', 'tsc-rs-fast', 'tsc-ts', 'tsrs', 'bun']
 
 
-def records(text: str, effect_only: bool = False) -> list[tuple[str, ...]]:
+def records(text: str) -> list[tuple[str, ...]]:
     """Keep each diagnostic header with its complete indented message chain."""
-    diagnostics = []
-    current = None
+    diagnostics, current = [], None
     for line in text.splitlines():
-        header = re.search(r'(?:error|warning|message|suggestion) (?:TS(-?\d+)|effect\([^)]+\)):', line)
-        if header:
-            is_effect = header[1] is None or header[1].startswith('377')
-            current = [line] if not effect_only or is_effect else None
-            if current is not None:
-                diagnostics.append(current)
+        if re.search(r'(?:error|warning|message|suggestion) TS-?\d+:', line):
+            current = [line]
+            diagnostics.append(current)
         elif current is not None and line.startswith((' ', '\t')):
             current.append(line)
         else:
             current = None
-    return sorted(tuple(diagnostic) for diagnostic in diagnostics)
+    return sorted(tuple(d) for d in diagnostics)
 
 
-def compare(results: Path, stem: str, effect_only: bool = False) -> None:
-    def diagnostics(tool: str) -> list[tuple[str, ...]]:
-        return sorted(record for stream in ['stdout', 'stderr']
-                      for record in records((results / f'{stem}.{tool}.{stream}').read_text(), effect_only))
-    rust, go = diagnostics('tsc-rs'), diagnostics('tsc7')
-    if rust != go:
-        raise SystemExit(f'{stem}: Rust/Go diagnostics differ; see saved preflight output')
-    print(f'{stem}: MATCH ({len(rust)} diagnostics)')
+def cell(results: Path, case: str, tool: str, go: list | None) -> str:
+    """'MATCH n', 'DIFF n (-missing +extra)', 'failed' or '-' (not run)."""
+    errors = results / f'{case}.errors'
+    status = {r.split()[0]: r for r in errors.read_text().splitlines()} if errors.exists() else {}
+    if tool not in status:
+        return '-'
+    if status[tool].endswith('failed'):
+        return status[tool].split(maxsplit=1)[1]
+    found = sorted(r for s in ['stdout', 'stderr'] for r in records((results / f'{case}.{tool}.{s}').read_text()))
+    if go is None or found == go:
+        return f'MATCH {len(found)}'
+    missing, extra = len(set(go) - set(found)), len(set(found) - set(go))
+    return f'DIFF {len(found)} (-{missing} +{extra})'
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('work', type=Path)
-    parser.add_argument('--suite', choices=['all', 'apps', 't3'], default='all')
-    cases = apps + [f't3-{project}-{mode}' for project in projects for mode in ['noeffect', 'effect']]
-    parser.add_argument('--case', choices=cases)
+    parser.add_argument('--case', choices=CASES)
     args = parser.parse_args()
     results = args.work / 'results'
-    if args.case:
-        compare(results, args.case, effect_only=args.case.endswith('-effect'))
-    elif args.suite in ['all', 'apps']:
-        for app in apps:
-            compare(results, app)
-    if not args.case and args.suite in ['all', 't3']:
-        for project in projects:
-            compare(results, f't3-{project}-noeffect')
-            # effect-tsgo has its own TypeScript pin. Compare its Effect rules only;
-            # the plain pinned TypeScript comparison above covers TypeScript errors.
-            compare(results, f't3-{project}-effect', effect_only=True)
+    rows = ['| Case | tsc7 | ' + ' | '.join(TOOLS) + ' |', '| --- |' + ' --- |' * (len(TOOLS) + 1)]
+    for case in [args.case] if args.case else CASES:
+        if not (results / f'{case}.errors').exists():
+            continue
+        go_file = results / f'{case}.tsc7.stdout'
+        go = sorted(r for s in ['stdout', 'stderr'] for r in records((results / f'{case}.tsc7.{s}').read_text())) \
+            if go_file.exists() else None
+        rows.append(f'| {case} | {len(go) if go is not None else "-"} | '
+                    + ' | '.join(cell(results, case, t, go) for t in TOOLS) + ' |')
+    table = '\n'.join(rows) + '\n'
+    print(table)
+    if not args.case:
+        (results / 'diagnostics.md').write_text(table)

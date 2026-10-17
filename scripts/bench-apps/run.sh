@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Times a full type check of each app with tsc 6, tsc 7, tsc-rs, tsc-rs --fast and bun check (hyperfine, 1 warmup,
+# Times a full type check of each app with tsc 7, tsc-rs, tsc-rs --fast, tsc-ts, tsrs and bun check (hyperfine, 1 warmup,
 # RUNS runs, default 5). Before the timing, one run per tool writes its exit code and errors.
 # usage: scripts/bench-apps/run.sh <work-dir> [app...]   (after setup.sh; default: every app)
 # Output: <work-dir>/results/<app>.json (hyperfine), <app>.errors and <app>.<tool>.diag.
@@ -18,13 +18,11 @@ typeorm typeorm packages/typeorm/tsconfig.bench.json
 excalidraw excalidraw tsconfig.bench.json
 trpc-server trpc packages/server/tsconfig.json'
 
-# Native binaries, without the npm launchers. tsc 6 runs out of memory on VS Code and Sentry with
-# Node's default heap.
+# Native binaries, without the npm launchers.
 # shellcheck source=scripts/bench-apps/common.sh
 source "$(cd -- "$(dirname -- "$0")" && pwd)/common.sh"
 bench_tools "$work"
-TS6="node --max-old-space-size=16384 $work/node_modules/ts6/lib/tsc.js"
-names=(tsc6 tsc7 tsc-rs tsc-rs-fast bun)
+names=(tsc7 tsc-rs tsc-rs-fast tsc-ts tsrs bun)
 sel=()
 for i in "${!names[@]}"; do [[ " ${TOOLS:-${names[*]}} " == *" ${names[$i]} "* ]] && sel+=("$i"); done
 tag=${TOOLS:+.${TOOLS// /+}}
@@ -33,8 +31,8 @@ mkdir -p "$work/results"
 while read -r app dir cfg; do
   [[ $# == 0 || " $* " == *" $app "* ]] || continue
   flags="-p $cfg --noEmit --incremental false"
-  cmds=("$TS6 $flags --pretty false" "$GO $flags --pretty false" "$RS $flags --pretty false"
-        "$RS $flags --fast --pretty false" "$BUN check $flags --no-pretty --all")
+  cmds=("$GO $flags --pretty false" "$RS $flags --pretty false" "$RS $flags --fast --pretty false"
+        "$TSCTS $flags --pretty false" "$TSRS $flags --pretty false" "$BUN check $flags --no-pretty --all")
   cd "$work/repos/$dir"
   bench_measure "$work/results/$app$tag" "${cmds[@]}"
 done <<<"$APPS"
