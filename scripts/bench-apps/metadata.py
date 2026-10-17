@@ -32,7 +32,7 @@ tools = {
     'tsc-rs': nm / '@tsc-rs/linux-x64/lib/tsc',
     'tsc-ts': nm / '@tsc-ts/linux-x64-gnu/lib/tsc-ts',
     'tsrs': nm / '@tsrs/linux-x64-gnu/tsrs',
-    'bun': nm / '@oven/bun-linux-x64/bin/bun',
+    'bun': nm / 'bun/bin/bun.exe',
 }
 metadata = {
     'date': datetime.now(timezone.utc).isoformat(),

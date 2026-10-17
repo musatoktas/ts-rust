@@ -9,7 +9,10 @@ bench_tools() {
   RS=$nm/@tsc-rs/linux-x64/lib/tsc
   TSCTS=$nm/@tsc-ts/linux-x64-gnu/lib/tsc-ts
   TSRS=$nm/@tsrs/linux-x64-gnu/tsrs
-  BUN=$nm/@oven/bun-linux-x64/bin/bun
+  # bun's postinstall moves the native binary here from @oven/bun-linux-x64.
+  BUN=$nm/bun/bin/bun.exe
+  local b
+  for b in "$GO" "$RS" "$TSCTS" "$TSRS" "$BUN"; do [[ -x $b ]] || { echo "missing tool: $b" >&2; exit 1; }; done
 }
 
 # Keep every preflight's full output. A tool that crashes or runs over 10 minutes in its
